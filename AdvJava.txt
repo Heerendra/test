@@ -1,0 +1,503 @@
+/*
+/*
+
+
+IDao
+=======================================
+package com.app.service;
+
+import java.util.List;
+
+import com.app.pojos.Vendor;
+
+public interface IVendorService {
+	Vendor validateUser(String email,String pass);
+	List<Vendor> listVendors();
+	String deleteVendor(int vid);
+	String registerVendor(Vendor v);
+	Vendor getVendorDetails(int id);
+	String updateVendor(Vendor v);
+}
+
+
+DAOIMPL
+=====================
+package com.app.dao;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Repository;
+
+import com.app.pojos.Vendor;
+
+import java.util.List;
+
+import org.hibernate.*;
+
+@Repository
+public class VendorDaoImpl implements IVendorDao {
+	
+	@Autowired 
+	private SessionFactory sf;
+
+	public VendorDaoImpl() {
+		System.out.println("in cnstr of " + getClass().getName());
+	}
+
+	@Override
+	public Vendor validateUser(String email, String pass) {
+		String jpql = "select v from Vendor v where v.email=:em and v.password=:pa";
+		return sf.getCurrentSession().createQuery(jpql, Vendor.class).setParameter("em", email).setParameter("pa", pass)
+				.getSingleResult();
+	}
+
+	@Override
+	public List<Vendor> listVendors() {
+		String jpql = "select v from Vendor v where v.role=:role";
+		return sf.getCurrentSession().
+				createQuery(jpql, Vendor.class).
+				setParameter("role", "vendor").getResultList();
+	}
+
+	@Override
+	public String deleteVendorDetails(Vendor v) {
+		
+		sf.getCurrentSession().delete(v);
+		return "Vendor details deleted for Vendor ID "+v.getId();
+	}
+
+	@Override
+	public String updateVendorDetails(Vendor v) {
+		
+		sf.getCurrentSession().update(v);//
+		
+		return "Vendor details updated for Vendor ID "+v.getId();
+	}
+
+	@Override
+	public String registerVendor(Vendor v) {
+		
+		sf.getCurrentSession().persist(v);
+		return "Vendor details insertedd for Vendor ID "+v.getId();
+	}
+
+	@Override
+	public Vendor getVendorDetails(int vid) {
+		return sf.getCurrentSession().get(Vendor.class, vid);
+	}
+	
+
+}
+
+
+SERVICEIMPL
+==============================================
+package com.app.service;
+
+import java.util.List;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.app.dao.IVendorDao;
+import com.app.pojos.Vendor;
+
+@Service 
+@Transactional 
+public class VendorServiceImpl implements IVendorService {
+	
+	@Autowired
+	private IVendorDao dao;
+
+	@Override
+	public Vendor validateUser(String email, String pass) {
+		
+		return dao.validateUser(email, pass);
+	}
+
+	@Override
+	public List<Vendor> listVendors() {
+		return dao.listVendors();
+	}
+
+	@Override
+	public String deleteVendor(int vid) {
+		return dao.deleteVendorDetails(dao.getVendorDetails(vid));
+	}
+
+	@Override
+	public String registerVendor(Vendor v) {
+		
+		return dao.registerVendor(v);
+	}
+
+	@Override
+	public Vendor getVendorDetails(int id) {
+		
+		return dao.getVendorDetails(id);
+	}
+
+	@Override
+	public String updateVendor(Vendor v) {
+		
+		return dao.updateVendorDetails(v);
+	}
+	
+	
+
+
+
+
+
+USerController
+================================
+package com.app.controller;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import javax.servlet.http.HttpSession;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+
+import com.app.pojos.Vendor;
+import com.app.service.IVendorService;
+
+@Controller
+@RequestMapping("/user")
+public class UserController {
+	
+	@Autowired
+	private IVendorService service;
+
+	public UserController() {
+		System.out.println("in def constr of " + getClass().getName());
+	}
+
+	
+	@GetMapping("/login")
+	public String showLoginForm() {
+		System.out.println("in show login form");
+		return "/user/login";
+	}
+
+
+	@PostMapping("/login") 
+	public String processLoginForm(Model map, 
+			@RequestParam String email,
+			@RequestParam String password,
+			HttpSession hs) {
+		System.out.println("in process login form");
+		try {
+			
+			Vendor v = service.validateUser(email, password);
+			
+			map.addAttribute("status", "Login Successful....");
+			
+			hs.setAttribute("user_dtls", v);
+			
+			if (v.getRole().equals("admin")) // admin login
+			{
+					return "redirect:/admin/list";//replace by redirect
+			}
+			
+			return "/vendor/details";
+		} catch (RuntimeException e) {
+			System.out.println("err in user controller " + e);
+			
+			map.addAttribute("status", "Invalid Login , Pls retry!!!!");
+			return "/user/login";
+		}
+		
+
+	}
+
+
+
+
+ADMINController
+===============================
+
+package com.app.controller;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+
+import com.app.pojos.Vendor;
+import com.app.service.IVendorService;
+
+@Controller
+@RequestMapping("/admin")
+public class AdminController {
+	
+	@Autowired
+	private IVendorService service;
+
+	public AdminController() {
+		System.out.println("in constr of " + getClass().getName());
+	}
+
+	@GetMapping("/list")
+	public String showVendorList(Model map) {
+		System.out.println("in list vendor");
+		
+		map.addAttribute("vendor_list", service.listVendors());
+		return "/admin/list";
+	}
+	@GetMapping("/delete")
+	public String deleteVendor(@RequestParam int vid,
+			RedirectAttributes flashMap) {
+		System.out.println("in delete vendor "+vid+" "+flashMap);
+		flashMap.addFlashAttribute("status",service.deleteVendor(vid));
+			return "redirect:/admin/list"; 
+	}
+	@GetMapping("/add")
+	public String showRegForm(Vendor v) {
+		
+		 
+		System.out.println("in show reg form "+v);
+			return "/admin/register"; 
+	}
+	@PostMapping("/add")
+	public String processRegForm(Vendor v,RedirectAttributes flashMap)
+	{
+		
+		System.out.println("in process reg form "+v);
+		
+		flashMap.addFlashAttribute("status", service.registerVendor(v));
+		return "redirect:/admin/list";
+	}
+	
+	@GetMapping("/update")
+	public String showUpdateForm(@RequestParam int vid,Model map)
+	{
+		System.out.println("in show update form ");
+		
+		map.addAttribute("vendor",service.getVendorDetails(vid));
+		System.out.println(map);
+		return "/admin/update";
+	}
+	@PostMapping("/update")
+	public String processUpdateForm(Vendor v,RedirectAttributes flashMap)
+	{
+		System.out.println("in process update "+v);
+		
+		flashMap.addFlashAttribute("status", service.updateVendor(v));
+		return "redirect:/admin/list";
+	}
+	
+
+}
+
+
+LOgin
+=====================
+<%@ page language="java" contentType="text/html; charset=UTF-8"
+	pageEncoding="UTF-8"%>
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Insert title here</title>
+</head>
+<body>
+<h3 align="center" style="color: red;">${requestScope.status}</h3>
+	<form method="post">
+		<table style="background-color: cyan; margin: auto;">
+			<tr>
+				<td>Enter User Email</td>
+				<td><input type="text" name="email" /></td>
+			</tr>
+			<tr>
+				<td>Enter Password</td>
+				<td><input type="password" name="password" /></td>
+			</tr>
+
+			<tr>
+				<td><input type="submit" value="Login" /></td>
+			</tr>
+		</table>
+	</form>
+
+</body>
+</html>
+
+
+
+
+LIST
+========================================
+<%@ page language="java" contentType="text/html; charset=UTF-8"
+	pageEncoding="UTF-8"%>
+<%@ taglib uri="http://java.sun.com/jsp/jstl/core" prefix="c"%>
+<%@ taglib uri="http://www.springframework.org/tags" prefix="spring"%>
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Insert title here</title>
+</head>
+<body>
+<h4>Last Action Status : ${requestScope.status}</h4>
+	<h3>Vendor List</h3>
+	<table style="background-color: cyan; margin: auto;">
+		<c:forEach var="v" items="${requestScope.vendor_list}">
+
+			<tr>
+				<td>${v.name}</td>
+				<td>${v.email}</td>
+				<td>${v.city}</td>
+				<td>${v.phoneNo}</td>
+				<td><a href="<spring:url value='/admin/update?vid=${v.id}'/>">Update</a></td>
+				<td><a href="<spring:url value='/admin/delete?vid=${v.id}'/>">Delete</a></td>
+
+			</tr>
+		</c:forEach>
+	</table>
+	<h5>
+		<a href="<spring:url value='/admin/add'/>">Add New Vendor</a>
+	</h5>
+
+</body>
+</html>
+
+register
+==========================
+==========================
+
+<%@ page language="java" contentType="text/html; charset=UTF-8"
+	pageEncoding="UTF-8"%>
+	<%@ taglib uri="http://www.springframework.org/tags/form" prefix="sf" %>
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Insert title here</title>
+</head>
+<body>
+
+	<sf:form method="post" modelAttribute="vendor">
+		<table style="background-color: cyan; margin: auto;">
+			<tr>
+				<td>Enter User Email</td>
+				<td><sf:input  path="email" /></td>
+			</tr>
+			<tr>
+				<td>Enter User Name</td>
+				<td><sf:input  path="name" /></td>
+			</tr>
+			<tr>
+				<td>Enter City</td>
+				<td><sf:input  path="city" /></td>
+			</tr>
+			<tr>
+				<td>Enter Phone No</td>
+				<td><sf:input  path="phoneNo" /></td>
+			</tr>
+			<tr>
+				<td>Enter Password</td>
+				<td><sf:password path="password" /></td>
+			</tr>
+			<tr>
+				<td>Choose Role</td>
+				<td><sf:radiobutton path="role" value="admin" />Admin</td>
+				<td><sf:radiobutton path="role" value="vendor" />Vendor</td>
+			</tr>
+			<tr>
+				<td>Enter Reg Amount</td>
+				<td><sf:input  type="number" path="regAmount" /></td>
+			</tr>
+			<tr>
+				<td>Choose Reg Date</td>
+				<td><sf:input type="date" path="regDate" /></td>
+			</tr>
+
+			<tr>
+				<td><input type="submit" value="Register Me" /></td>
+
+
+			</tr>
+		</table>
+	</sf:form>
+
+</body>
+</html>
+
+
+
+UPDATE
+===================================
+<%@ page language="java" contentType="text/html; charset=UTF-8"
+	pageEncoding="UTF-8"%>
+	<%@ taglib uri="http://www.springframework.org/tags/form" prefix="sf" %>
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Insert title here</title>
+</head>
+<body>
+
+	<sf:form method="post" modelAttribute="vendor">
+		<table style="background-color: cyan; margin: auto;">
+			<tr>
+				<td>Your Assigned Ref ID (R)</td>
+				<td><sf:input  path="id" readonly="true"/></td>
+			</tr>
+			<tr>
+				<td>Your Email (R)</td>
+				<td><sf:input  path="email" readonly="true"/></td>
+			</tr>
+			<tr>
+				<td>Enter User Name</td>
+				<td><sf:input  path="name" /></td>
+			</tr>
+			<tr>
+				<td>Enter City</td>
+				<td><sf:input  path="city" /></td>
+			</tr>
+			<tr>
+				<td>Enter Phone No</td>
+				<td><sf:input  path="phoneNo" /></td>
+			</tr>
+			<tr>
+				<td>Enter Password</td>
+				<td><sf:password path="password" showPassword="true"/></td>
+			</tr>
+			<tr>
+				<td>Choose Role</td>
+				<td><sf:radiobutton path="role" value="admin" />Admin</td>
+				<td><sf:radiobutton path="role" value="vendor" />Vendor</td>
+			</tr>
+			<tr>
+				<td>Enter Reg Amount</td>
+				<td><sf:input  type="number" path="regAmount" /></td>
+			</tr>
+			<tr>
+				<td>Choose Reg Date</td>
+				<td><sf:input type="date" path="regDate" /></td>
+			</tr>
+
+			<tr>
+				<td><input type="submit" value="Update Details" /></td>
+
+
+			</tr>
+		</table>
+	</sf:form>
+
+</body>
+</html>
+
+*/
